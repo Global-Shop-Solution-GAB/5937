@@ -1,0 +1,218 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+	F.Intrinsic.Control.Case("15290")
+		F.Intrinsic.Control.CallSub(Get_Data)
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.CallSub(Exit)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_5937_ADP_Pyrl_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Exit)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Main.End
+
+Program.Sub.Get_Data.Start
+F.Intrinsic.Control.SetErrorHandler("Get_Data_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+V.Local.sCymd.Declare(String,"")
+V.Local.sTime.Declare(String,"")
+V.Local.sSql.Declare(String,"")
+V.Local.iIndex.Declare(Long,0)
+V.Local.iRecord.Declare(Long,0)
+V.Local.sRegularHours.Declare(String,"")
+v.Local.sOvertimeHours.Declare(String,"")
+v.Local.sVacationHours.Declare(String,"")
+V.Local.sOtherHours.Declare(String,"")
+V.Local.sFilter.Declare(String,"")
+V.Local.iView.Declare(Long,0)
+V.Local.sRecord.Declare(String,"")
+V.Local.sLastName.Declare(String,"")
+V.Local.sFileNum.Declare(String,"")
+
+F.Intrinsic.String.Left(V.Passed.888888,8,V.Local.sCymd)
+F.Intrinsic.String.Mid(V.Passed.888888,9,6,V.Local.sTime)
+
+F.Intrinsic.String.Build("Select Employee as EmployeeID, Name, Hours as Amount, Type, EC from Pyrl_Labor_Xfer where Run_CYMD = '{0}' and Run_Time = '{1}'", v.Local.sCymd, v.Local.sTime, v.Local.sSql)
+
+F.ODBC.Connection!Con.OpenCompanyConnection
+
+F.Data.DataTable.CreateFromSQL("Pyrl","con",V.Local.sSql,True)
+
+F.Data.DataTable.AddColumn("Pyrl","File_Num","String")
+
+F.Data.Dictionary.CreateFromSQL("File","con","Select Employee, Comments_2 From V_Employee_Mstr")
+F.Data.Dictionary.SetDefaultReturn("File","")
+F.Data.DataTable.FillFromDictionary("Pyrl","File","EmployeeID","File_Num")
+F.Data.Dictionary.Close("File")
+
+F.ODBC.Connection!Con.Close
+
+F.Intrinsic.Control.If(V.DataTable.Pyrl.RowCount--,=,-1)
+	F.Intrinsic.UI.Msgbox("No records found.","Payroll Export")
+	F.Data.DataTable.Close("Pyrl")
+	F.Intrinsic.Control.CallSub(Exit)
+F.Intrinsic.Control.Else
+	F.Data.DataView.Create("Pyrl","VPyrl",22,"","")
+	F.Data.DataView.ToDataTableDistinct("Pyrl","VPyrl","Emp","EmployeeID")
+	F.Intrinsic.Control.For(V.Local.iIndex,0,V.DataTable.Emp.RowCount--,1)
+		F.Intrinsic.Math.Add(V.Local.iIndex,1,V.Local.iRecord)
+		V.Local.sRegularHours.Set("")
+		v.Local.sOvertimeHours.Set("")
+		v.Local.sVacationHours.Set("")
+		v.Local.sOtherHours.Set("")
+		
+		F.Intrinsic.String.Build("EmployeeID = '{0}'",V.DataTable.Emp(V.Local.iIndex).EmployeeID!FieldValTrim,V.Local.sFilter)
+		
+		F.Data.DataView.SetFilter("Pyrl","VPyrl",V.Local.sFilter)
+		
+		F.Intrinsic.Control.If(V.DataView.Pyrl!VPyrl.RowCount--,<>,-1)
+			V.Local.sFileNum.Set(V.DataView.Pyrl!VPyrl(V.DataView.Pyrl!VPyrl.RowCount--).File_Num!FieldValTrim)
+			F.Intrinsic.String.Split(V.DataView.Pyrl!VPyrl(V.DataView.Pyrl!VPyrl.RowCount--).Name!FieldValTrim,",",V.Local.sLastName)
+		F.Intrinsic.Control.Else
+			V.Local.sFileNum.Set("")
+			V.Local.sLastName.Set("")
+		F.Intrinsic.Control.EndIf
+		
+		F.Intrinsic.Control.For(V.Local.iView,0,V.DataView.Pyrl!VPyrl.RowCount--,1)
+			'EC is blank so we need to look at Type and set the value for it
+			F.Intrinsic.Control.SelectCase(V.DataView.Pyrl!VPyrl(V.Local.iView).TYPE!FieldValTrim)
+				F.Intrinsic.Control.Case("RT")
+					'Regular Time
+					F.Intrinsic.Control.If(V.Local.sRegularHours.Trim,=,"")
+						v.Local.sRegularHours.Set(V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValString)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Add(V.Local.sRegularHours.Float,V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValFloat,V.Local.sRegularHours)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.Case("OT")
+					'Overtime
+					F.Intrinsic.Control.If(V.Local.sOvertimeHours.Trim,=,"")
+						v.Local.sOvertimeHours.Set(V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValString)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.Math.Add(V.Local.sOvertimeHours.Float,V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValFloat,V.Local.sOvertimeHours)
+					F.Intrinsic.Control.EndIf
+				
+				F.Intrinsic.Control.Case("EC")
+					F.Intrinsic.Control.If(V.DataView.Pyrl!VPyrl(V.Local.iView).EC!FieldValString,=,"03")
+						F.Intrinsic.Control.If(v.Local.sVacationHours.Trim,=,"")
+							v.Local.sVacationHours.Set(V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValString)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.Math.Add(V.Local.sVacationHours.Float,V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValFloat,V.Local.sVacationHours)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.ElseIf(V.DataView.Pyrl!VPyrl(V.Local.iView).EC!FieldValString,=,"04")
+					'putting all other hours into other this should only be 04 but accounting for if other EC gets added.
+						F.Intrinsic.Control.If(v.Local.sOtherHours.Trim,=,"")
+							v.Local.sOtherHours.Set(V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValString)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.Math.Add(V.Local.sOtherHours.Float,V.DataView.Pyrl!VPyrl(V.Local.iView).Amount!FieldValFloat,V.Local.sOtherHours)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndSelect
+				
+		F.Intrinsic.Control.Next(V.Local.iView)
+		
+		F.Intrinsic.String.Format(V.Local.sRegularHours.Float,"#0.00",V.Local.sRegularHours)
+		F.Intrinsic.String.Format(V.Local.sOvertimeHours.Float,"#0.00",V.Local.sOvertimeHours)
+		F.Intrinsic.String.Format(V.Local.sVacationHours.Float,"#0.00",V.Local.sVacationHours)
+		F.Intrinsic.String.Format(V.Local.sOtherHours.Float,"#0.00",V.Local.sOtherHours)
+		
+		'Co Code,Batch ID,File #,Employee Name,Shift,Reg Hours,Reg Earnings,O/T Hours,O/T Earnings,Hours 3 Code,Hours 3 Amount,Hours 3 Code,Hours 3 Amount,Hours 3 Code,Hours 3 Amount,Earnings 3 Code,Earnings 3 Amount
+		F.Intrinsic.Control.If(V.Local.sRecord.Trim,=,"")
+			F.Intrinsic.String.Build("{0}{1}{0},{0}{2}{0},{0}{3}{0},{0}{4}{0},{0}{5}{0},{0}{6}{0},{0}{7}{0},{0}{8}{0},{0}{9}{0},{0}{10}{0},{0}{11}{0},{0}{12}{0},{0}{13}{0},{0}{14}{0},{0}{15}{0},{0}{16}{0},{0}{17}{0}",V.Ambient.DblQuote,"63Z","112713",V.Local.sFileNum,V.Local.sLastName,"",V.Local.sRegularHours,"",V.Local.sOvertimeHours,"","V",V.Local.sVacationHours,"D",V.Local.sOtherHours,"H","0","RT","0",V.Local.sRecord)
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Build("{18}{19}{0}{1}{0},{0}{2}{0},{0}{3}{0},{0}{4}{0},{0}{5}{0},{0}{6}{0},{0}{7}{0},{0}{8}{0},{0}{9}{0},{0}{10}{0},{0}{11}{0},{0}{12}{0},{0}{13}{0},{0}{14}{0},{0}{15}{0},{0}{16}{0},{0}{17}{0}",V.Ambient.DblQuote,"63Z","112713",V.Local.sFileNum,V.Local.sLastName,"",V.Local.sRegularHours,"",V.Local.sOvertimeHours,"","V",V.Local.sVacationHours,"D",V.Local.sOtherHours,"H","0","RT","0",V.Local.sRecord,V.Ambient.NewLine,V.Local.sRecord)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.iIndex)
+	
+	F.Intrinsic.String.Build("{0}Co Code{0},{0}Batch ID{0},{0}File #{0},{0}Employee Name{0},{0}Shift{0},{0}Reg Hours{0},{0}Reg Earnings{0},{0}O/T Hours{0},{0}O/T Earnings{0},{0}Hours 3 Code{0},{0}Hours 3 Amount{0},{0}Hours 3 Code{0},{0}Hours 3 Amount{0},{0}Hours 3 Code{0},{0}Hours 3 Amount{0},{0}Earnings 3 Code{0},{0}Earnings 3 Amount{0}{1}{2}",V.Ambient.DblQuote,V.Ambient.NewLine,V.Local.sRecord,V.Local.sRecord)
+	
+	F.Intrinsic.Control.CallSub(Write_File,"Records",V.Local.sRecord)
+F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Get_Data_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_5937_ADP_Pyrl_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Exit)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Get_Data.End
+
+Program.Sub.Write_File.Start
+F.Intrinsic.Control.SetErrorHandler("Write_File_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+V.Local.sDate.Declare(String,"")
+V.Local.sFilename.Declare(String,"")
+V.Local.sDirectory.Declare(String,"")
+V.Local.bExists.Declare(Boolean,False)
+V.Local.sFullpath.Declare(String,"")
+V.Local.sMsg.Declare(String,"")
+
+'set the date and format it
+F.Intrinsic.String.Format (V.Ambient.Date ,"MMDDYYYY",V.Local.sDate)
+
+'build the filename
+F.Intrinsic.String.Build("{0}_PAYROLL_EXPORT_{1}.csv",V.Local.sDate,V.Caller.User.Trim,V.Local.sFilename)
+
+F.Intrinsic.String.Build("{0}\Custom",V.Caller.GlobalDir,V.Local.sDirectory)
+F.Intrinsic.File.DirExists(V.Local.sDirectory,V.Local.bexists)
+F.Intrinsic.Control.If(V.Local.bExists,=,False)
+	F.Intrinsic.File.CreateDir(V.Local.sDirectory)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("{0}\Custom\5937",V.Caller.GlobalDir,V.Local.sDirectory)
+F.Intrinsic.File.DirExists(V.Local.sDirectory,V.Local.bExists)
+F.Intrinsic.Control.If(V.Local.bExists,=,False)
+	F.Intrinsic.File.CreateDir(V.Local.sDirectory)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.String.Build("{0}\Custom\5937\{1}",v.Caller.GlobalDir,V.Local.sFilename,v.Local.sFullpath)
+
+F.Intrinsic.File.String2File(V.Local.sFullpath,V.Args.Records)
+F.Intrinsic.String.Build("File Created:  Location: {0}",V.Local.sFullpath,V.Local.sMsg)
+F.Intrinsic.UI.Msgbox(V.Local.sMsg)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Write_File_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_5937_ADP_Pyrl_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Exit)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Write_File.End
+
+Program.Sub.Exit.Start
+F.Intrinsic.Control.SetErrorHandler("Exit_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String,"")
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Exit_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	F.Intrinsic.String.Build("Project: GCG_5937_ADP_Pyrl_Export.g2u {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+Function.Intrinsic.Control.EndIf
+Program.Sub.Exit.End
